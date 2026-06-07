@@ -48,6 +48,11 @@ def health_check() -> dict[str, str]:
     }
 
 
+@app.get("/api/health", tags=["health"])
+def api_health_check() -> dict[str, str]:
+    return health_check()
+
+
 if __name__ == "__main__":
     import uvicorn
 

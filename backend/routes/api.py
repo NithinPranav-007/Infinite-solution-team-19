@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, Body, HTTPException, Request
@@ -19,6 +20,15 @@ router = APIRouter()
 
 def _storage(request: Request) -> StorageService:
     return request.app.state.storage
+
+
+def _database_path(storage: StorageService, db_path: str | None = None) -> Path:
+    if db_path:
+      return Path(db_path)
+    latest = storage.get_latest_snapshot_record()
+    if latest and latest.get("source_database"):
+        return Path(latest["source_database"])
+    return storage.base_dir / "sample.db"
 
 
 def _build_agent(storage: StorageService, db_path: str | None = None) -> SchemaGuardianAgent:
@@ -80,6 +90,50 @@ def analyze_changes(
 @router.get("/reports")
 def list_reports(request: Request) -> list[dict]:
     return _storage(request).list_reports()
+
+
+@router.get("/database/preview")
+def preview_database(request: Request, db_path: str | None = None, table: str | None = None, limit: int = 5) -> dict:
+    storage = _storage(request)
+    target_path = _database_path(storage, db_path)
+    if not target_path.exists():
+        raise HTTPException(status_code=404, detail=f"SQLite database not found: {target_path}")
+
+    with sqlite3.connect(target_path) as connection:
+        connection.row_factory = sqlite3.Row
+        table_rows = connection.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table' AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+            """
+        ).fetchall()
+
+        tables: list[dict] = []
+        for table_row in table_rows:
+            table_name = table_row["name"]
+            column_rows = connection.execute(f"PRAGMA table_info('{table_name}')").fetchall()
+            row_count = connection.execute(f"SELECT COUNT(*) AS count FROM '{table_name}'").fetchone()["count"]
+
+            if table and table != table_name:
+                continue
+
+            sample_rows = connection.execute(f"SELECT * FROM '{table_name}' LIMIT ?", (limit,)).fetchall()
+            tables.append(
+                {
+                    "name": table_name,
+                    "columns": [column["name"] for column in column_rows],
+                    "row_count": row_count,
+                    "sample_rows": [dict(row) for row in sample_rows],
+                }
+            )
+
+    return {
+        "database": str(target_path),
+        "table_count": len(tables),
+        "tables": tables,
+    }
 
 
 @router.post("/notify")
