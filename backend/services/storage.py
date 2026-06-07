@@ -99,64 +99,64 @@ class StorageService:
             customer_count = connection.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
             if customer_count == 0:
                 connection.execute(
-                    "INSERT INTO customers (customer_name, email) VALUES (?, ?)",
+                    "INSERT OR IGNORE INTO customers (customer_name, email) VALUES (?, ?)",
                     ("Acme Corp", "ops@acme.example"),
                 )
                 connection.execute(
-                    "INSERT INTO customers (customer_name, email) VALUES (?, ?)",
+                    "INSERT OR IGNORE INTO customers (customer_name, email) VALUES (?, ?)",
                     ("Northwind", "data@northwind.example"),
                 )
                 connection.execute(
-                    "INSERT INTO customers (customer_name, email) VALUES (?, ?)",
+                    "INSERT OR IGNORE INTO customers (customer_name, email) VALUES (?, ?)",
                     ("Blue Peak Labs", "contact@bluepeak.example"),
                 )
                 connection.execute(
-                    "INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
+                    "INSERT OR IGNORE INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
                     (1, 1499.50, "active"),
                 )
                 connection.execute(
-                    "INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
+                    "INSERT OR IGNORE INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
                     (2, 249.00, "pending"),
                 )
                 connection.execute(
-                    "INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
+                    "INSERT OR IGNORE INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
                     (3, 895.75, "active"),
                 )
                 connection.execute(
-                    "INSERT INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
                     (1, "SKU-001", 4, 199.95),
                 )
                 connection.execute(
-                    "INSERT INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
                     (2, "SKU-014", 2, 124.50),
                 )
                 connection.execute(
-                    "INSERT INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
                     (3, "SKU-021", 5, 179.15),
                 )
             elif customer_count < 5:
                 connection.execute(
-                    "INSERT INTO customers (customer_name, email) VALUES (?, ?)",
+                    "INSERT OR IGNORE INTO customers (customer_name, email) VALUES (?, ?)",
                     ("Skyline Retail", "hello@skylineretail.example"),
                 )
                 connection.execute(
-                    "INSERT INTO customers (customer_name, email) VALUES (?, ?)",
+                    "INSERT OR IGNORE INTO customers (customer_name, email) VALUES (?, ?)",
                     ("Vertex Health", "team@vertexhealth.example"),
                 )
                 connection.execute(
-                    "INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
+                    "INSERT OR IGNORE INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
                     (4, 1799.99, "active"),
                 )
                 connection.execute(
-                    "INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
+                    "INSERT OR IGNORE INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
                     (5, 640.25, "pending"),
                 )
                 connection.execute(
-                    "INSERT INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
                     (4, "SKU-033", 3, 399.99),
                 )
                 connection.execute(
-                    "INSERT INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
+                    "INSERT OR IGNORE INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
                     (5, "SKU-044", 1, 640.25),
                 )
             connection.commit()
