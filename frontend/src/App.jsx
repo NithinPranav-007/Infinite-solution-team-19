@@ -4,6 +4,8 @@ import DatabasePreview from './pages/DatabasePreview'
 import History from './pages/History'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
+import Simulate from './pages/Simulate'
+import Toast, { useToast } from './components/Toast'
 import {
   fetchDatabasePreview,
   fetchDrifts,
@@ -12,9 +14,10 @@ import {
   fetchHealth,
   triggerScanWithPath,
   fetchSettings,
+  fetchSnapshots,
 } from './lib/api'
 
-const tabs = ['Dashboard', 'Database', 'History', 'Reports', 'Settings']
+const tabs = ['Dashboard', 'Database', 'Simulate', 'History', 'Reports', 'Settings']
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('Dashboard')
@@ -22,6 +25,7 @@ export default function App() {
     latest: null,
     drifts: [],
     reports: [],
+    snapshots: [],
     health: { status: 'ok', database: '' },
     loading: true,
     scanTarget: '',
@@ -29,23 +33,25 @@ export default function App() {
     selectedTable: '',
   })
   const [isScanning, setIsScanning] = useState(false)
+  const { toasts, toast, dismissToast } = useToast()
 
   const refreshData = async (targetPath) => {
     const activePath = targetPath || state.scanTarget
-    const [health, latest, drifts, reports, databasePreview] = await Promise.all([
+    const [health, latest, drifts, reports, databasePreview, snapshots] = await Promise.all([
       fetchHealth(),
       fetchLatestSchema(),
       fetchDrifts(),
       fetchReports(),
       fetchDatabasePreview(activePath, state.selectedTable),
+      fetchSnapshots(),
     ])
-    return { health, latest, drifts, reports, databasePreview }
+    return { health, latest, drifts, reports, databasePreview, snapshots }
   }
 
   const runScan = async (dbPath) => {
     setIsScanning(true)
     try {
-      await triggerScanWithPath(dbPath || null)
+      const result = await triggerScanWithPath(dbPath || null)
       const refreshed = await refreshData(dbPath)
       if (!refreshed.selectedTable && refreshed.databasePreview?.tables?.length) {
         refreshed.selectedTable = refreshed.databasePreview.tables[0].name
@@ -56,6 +62,20 @@ export default function App() {
         loading: false,
         scanTarget: dbPath || current.scanTarget || refreshed.health?.database || '',
       }))
+
+      // Show toast with scan results
+      const changeCount = result?.drift_changes?.length || 0
+      const severity = result?.impact_analysis?.severity_label || 'Low'
+      if (changeCount > 0) {
+        toast.warning(
+          `${changeCount} schema change(s) detected — Severity: ${severity}`,
+          'Drift Detected'
+        )
+      } else {
+        toast.success('No schema changes detected. Everything is in sync.', 'Scan Complete')
+      }
+    } catch (err) {
+      toast.error(err.detail || err.message || 'Scan failed. Check backend connection.', 'Scan Failed')
     } finally {
       setIsScanning(false)
     }
@@ -77,6 +97,7 @@ export default function App() {
         latest: refreshed.latest,
         drifts: refreshed.drifts,
         reports: refreshed.reports,
+        snapshots: refreshed.snapshots || [],
         health: { ...resolvedHealth, database: resolvedPath || resolvedHealth.database },
         loading: false,
         scanTarget: resolvedPath,
@@ -92,6 +113,7 @@ export default function App() {
         latest: null,
         drifts: [],
         reports: [],
+        snapshots: [],
         health: { status: 'ok', database: '' },
         loading: false,
         scanTarget: '',
@@ -119,11 +141,18 @@ export default function App() {
       scanTarget: refreshed.health?.database || refreshed.latest?.source_database || current.scanTarget || '',
       selectedTable: refreshed.databasePreview?.tables?.[0]?.name || current.selectedTable,
     }))
+    toast.info('Dashboard data refreshed', 'Refreshed')
   }
 
   const handleSettingsChange = async () => {
     setState((current) => ({ ...current, loading: true }))
     await loadInitialData()
+    toast.success('Settings applied and data reloaded', 'Settings Updated')
+  }
+
+  const handleScanAfterSimulate = async () => {
+    setActiveTab('Dashboard')
+    await runScan(state.scanTarget)
   }
 
   return (
@@ -147,9 +176,16 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => handleConnect(state.scanTarget)}
-                  className="rounded-xl bg-gradient-to-r from-teal-400 to-emerald-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110 active:scale-95 shadow-lg shadow-teal-500/20"
+                  disabled={isScanning}
+                  className="rounded-xl bg-gradient-to-r from-teal-400 to-emerald-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:brightness-110 active:scale-95 shadow-lg shadow-teal-500/20 disabled:opacity-70"
                 >
-                  {isScanning ? 'Scanning...' : 'Connect & Scan'}
+                  {isScanning ? (
+                    <span className="flex items-center gap-2">
+                      <span className="spinner" /> Scanning...
+                    </span>
+                  ) : (
+                    'Connect & Scan'
+                  )}
                 </button>
                 <button
                   type="button"
@@ -170,8 +206,8 @@ export default function App() {
 
             <div className="mt-6 flex flex-wrap gap-3 text-xs text-slate-300">
               <span className="rounded-full border border-teal-500/20 bg-teal-950/30 px-3 py-1.5 text-teal-300 font-medium flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
-                {state.health?.status === 'ok' ? 'Database Connected' : 'Database Offline'}
+                <span className={`w-1.5 h-1.5 rounded-full ${isScanning ? 'bg-amber-400 scan-active' : 'bg-teal-400 animate-pulse'}`} />
+                {isScanning ? 'Scanning...' : state.health?.status === 'ok' ? 'Database Connected' : 'Database Offline'}
               </span>
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-slate-200">
                 Path: <code className="text-teal-300 font-mono text-xs">{state.health?.database || 'No database selected'}</code>
@@ -201,7 +237,8 @@ export default function App() {
 
         <main className="grid flex-1 gap-6">
           {state.loading ? (
-            <div className="rounded-[2rem] border border-white/10 bg-slate-950/45 p-8 text-center text-slate-400">
+            <div className="rounded-[2rem] border border-white/10 bg-slate-950/45 p-8 text-center text-slate-400 flex flex-col items-center gap-4">
+              <span className="spinner spinner-lg text-teal-400" />
               Loading configuration state...
             </div>
           ) : (
@@ -211,9 +248,11 @@ export default function App() {
                   latest={state.latest}
                   drifts={state.drifts}
                   reports={state.reports}
+                  snapshots={state.snapshots}
                   health={state.health}
                   loading={state.loading}
                   onOpenDatabase={() => setActiveTab('Database')}
+                  toast={toast}
                 />
               )}
               {activeTab === 'Database' && (
@@ -234,18 +273,28 @@ export default function App() {
                   onRefresh={handleRefresh}
                 />
               )}
+              {activeTab === 'Simulate' && (
+                <Simulate
+                  onScanAfterSimulate={handleScanAfterSimulate}
+                  toast={toast}
+                />
+              )}
               {activeTab === 'History' && <History drifts={state.drifts} />}
-              {activeTab === 'Reports' && <Reports reports={state.reports} />}
+              {activeTab === 'Reports' && <Reports reports={state.reports} toast={toast} />}
               {activeTab === 'Settings' && (
                 <Settings
                   onSettingsChange={handleSettingsChange}
                   currentDbPath={state.scanTarget}
+                  toast={toast}
                 />
               )}
             </>
           )}
         </main>
       </div>
+
+      {/* Global Toast Notifications */}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

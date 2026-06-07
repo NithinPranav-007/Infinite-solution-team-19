@@ -355,3 +355,37 @@ class StorageService:
             )
             connection.commit()
 
+    def get_snapshot_by_name(self, snapshot_name: str) -> dict[str, Any] | None:
+        """Retrieve a single snapshot record by its filename."""
+        with sqlite3.connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT snapshot_name, captured_at, source_database, snapshot_payload FROM snapshots WHERE snapshot_name = ?",
+                (snapshot_name,),
+            ).fetchone()
+        if not row:
+            return None
+        payload = json.loads(row[3])
+        payload["snapshot_name"] = row[0]
+        payload["captured_at"] = row[1]
+        payload["source_database"] = row[2]
+        return payload
+
+    def reset_all(self) -> dict[str, int]:
+        """Delete all drifts, reports, snapshots from DB and filesystem."""
+        counts: dict[str, int] = {}
+        with sqlite3.connect(self.db_path) as connection:
+            counts["drifts"] = connection.execute("SELECT COUNT(*) FROM drifts").fetchone()[0]
+            counts["reports"] = connection.execute("SELECT COUNT(*) FROM reports").fetchone()[0]
+            counts["snapshots"] = connection.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0]
+            connection.execute("DELETE FROM drifts")
+            connection.execute("DELETE FROM reports")
+            connection.execute("DELETE FROM snapshots")
+            connection.commit()
+
+        for snapshot_file in self.snapshots_dir.glob("*.json"):
+            snapshot_file.unlink(missing_ok=True)
+        for report_file in self.reports_dir.glob("*.json"):
+            report_file.unlink(missing_ok=True)
+
+        return counts
+

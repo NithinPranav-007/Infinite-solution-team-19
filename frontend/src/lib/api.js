@@ -3,7 +3,11 @@ const API_ROOT = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 async function request(path, options = {}) {
   const response = await fetch(`${API_ROOT}${path}`, options)
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
+    const body = await response.json().catch(() => ({}))
+    const error = new Error(body.detail || `Request failed: ${response.status}`)
+    error.status = response.status
+    error.detail = body.detail || ''
+    throw error
   }
   return response.json()
 }
@@ -45,7 +49,7 @@ export function triggerScanWithPath(dbPath) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(dbPath ? { db_path: dbPath } : {}),
-  }).catch(() => null)
+  })
 }
 
 export function fetchDatabasePreview(dbPath = '', table = '') {
@@ -68,5 +72,43 @@ export function saveSettings(settings) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(settings),
-  }).catch(() => ({ status: 'error', message: 'Network request failed' }))
+  })
+}
+
+// ── New API functions ────────────────────────────────────────────────
+
+export function fetchSnapshots() {
+  return request('/snapshots').catch(() => [])
+}
+
+export function compareSnapshots(previousSnapshot, currentSnapshot) {
+  return request('/compare', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      previous_snapshot: previousSnapshot,
+      current_snapshot: currentSnapshot,
+    }),
+  })
+}
+
+export function simulateChange(payload) {
+  return request('/simulate', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function resetAllData() {
+  return request('/reset', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
 }

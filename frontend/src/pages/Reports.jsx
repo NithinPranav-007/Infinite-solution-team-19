@@ -1,10 +1,27 @@
 import React from 'react'
 
-export default function Reports({ reports }) {
+function downloadJson(report) {
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = report.report_name || 'report.json'
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  URL.revokeObjectURL(url)
+}
+
+export default function Reports({ reports, toast }) {
   const latestReport = reports[0]
 
+  const handleDownload = (report) => {
+    downloadJson(report)
+    if (toast) toast.success(`Downloaded ${report.report_name}`, 'Export Complete')
+  }
+
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/6 p-5 shadow-glow backdrop-blur">
+    <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-glow backdrop-blur">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[0.68rem] uppercase tracking-[0.35em] text-slate-400">Artifacts</p>
@@ -19,9 +36,20 @@ export default function Reports({ reports }) {
 
       {latestReport ? (
         <div className="mt-6 rounded-2xl border border-accent/20 bg-accent/10 p-5 text-sm text-slate-100">
-          <p className="text-xs uppercase tracking-[0.3em] text-accent/80">Latest report</p>
-          <p className="mt-2 text-lg font-semibold text-white">{latestReport.report_name}</p>
-          <p className="mt-2 text-slate-200">Severity {latestReport.impact_analysis?.severity_label || 'Low'} with risk score {latestReport.impact_analysis?.risk_score ?? 0}.</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-accent/80">Latest report</p>
+              <p className="mt-2 text-lg font-semibold text-white">{latestReport.report_name}</p>
+              <p className="mt-2 text-slate-200">Severity {latestReport.impact_analysis?.severity_label || 'Low'} with risk score {latestReport.impact_analysis?.risk_score ?? 0}.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handleDownload(latestReport)}
+              className="rounded-xl bg-gradient-to-r from-teal-400 to-emerald-400 px-4 py-2 text-xs font-bold text-slate-950 transition hover:brightness-110 active:scale-95 shadow-md shadow-teal-500/10"
+            >
+              ↓ Download JSON
+            </button>
+          </div>
         </div>
       ) : (
         <div className="mt-6 rounded-2xl border border-dashed border-white/15 bg-slate-950/40 p-8 text-center text-slate-400">
@@ -37,7 +65,16 @@ export default function Reports({ reports }) {
                 <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Report file</p>
                 <h3 className="mt-2 text-lg font-medium text-white">{report.report_name || `Report ${index + 1}`}</h3>
               </div>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200">{report.created_at || 'Pending'}</span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200">{report.created_at || 'Pending'}</span>
+                <button
+                  type="button"
+                  onClick={() => handleDownload(report)}
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-teal-300 font-semibold transition hover:bg-teal-500/10 hover:border-teal-500/30"
+                >
+                  ↓ JSON
+                </button>
+              </div>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
