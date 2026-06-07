@@ -5,7 +5,7 @@
 🎥 **Project Demo Video:**
 https://github.com/NithinPranav-007/Infinite-solution-team-19/blob/main/team%2019%20video(output).mp4
 
-**Schema Evolution Guardian** is an AI-powered schema drift detection and impact analysis platform for SQLite databases. It captures schema snapshots over time, compares versions, analyzes blast radius with Ollama (local LLM), and generates migration guidance through a React dashboard.
+
 
 
 **Schema Evolution Guardian** is an AI-powered schema drift detection and impact analysis platform for SQLite databases. It captures schema snapshots over time, compares versions, analyzes blast radius with Ollama (local LLM), and generates migration guidance through a React dashboard.
