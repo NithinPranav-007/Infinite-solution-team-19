@@ -11,7 +11,6 @@ from services.agent import SchemaGuardianAgent
 from services.ai_analyzer import AIImpactAnalyzer
 from services.drift_detector import DriftDetector
 from services.migration_generator import MigrationGenerator
-from services.notifier import DiscordNotifier
 from services.schema_snapshot import SchemaSnapshotService
 from services.storage import StorageService
 
@@ -24,7 +23,10 @@ def _storage(request: Request) -> StorageService:
 
 def _database_path(storage: StorageService, db_path: str | None = None) -> Path:
     if db_path:
-      return Path(db_path)
+        return Path(db_path)
+    configured_db_path = storage.get_setting("target_db_path")
+    if configured_db_path:
+        return Path(configured_db_path)
     latest = storage.get_latest_snapshot_record()
     if latest and latest.get("source_database"):
         return Path(latest["source_database"])
@@ -32,19 +34,19 @@ def _database_path(storage: StorageService, db_path: str | None = None) -> Path:
 
 
 def _build_agent(storage: StorageService, db_path: str | None = None) -> SchemaGuardianAgent:
-    snapshot_service = SchemaSnapshotService(storage=storage)
-    drift_detector = DriftDetector()
-    analyzer = AIImpactAnalyzer()
-    generator = MigrationGenerator()
-    notifier = DiscordNotifier()
+    resolved_db_path = db_path
+    if not resolved_db_path:
+        configured_db_path = storage.get_setting("target_db_path")
+        if configured_db_path:
+            resolved_db_path = configured_db_path
+
     return SchemaGuardianAgent(
         storage=storage,
-        snapshot_service=snapshot_service,
-        drift_detector=drift_detector,
-        analyzer=analyzer,
-        generator=generator,
-        notifier=notifier,
-        db_path=db_path,
+        snapshot_service=SchemaSnapshotService(storage=storage),
+        drift_detector=DriftDetector(),
+        analyzer=AIImpactAnalyzer(),
+        generator=MigrationGenerator(),
+        db_path=resolved_db_path,
     )
 
 
@@ -136,17 +138,18 @@ def preview_database(request: Request, db_path: str | None = None, table: str | 
     }
 
 
-@router.post("/notify")
-def notify(request: Request, payload: dict = Body(default_factory=dict)) -> dict:
-    notifier = DiscordNotifier()
-    message = payload.get("message") or "Schema drift notification"
-    return notifier.send(message=message, severity=payload.get("severity", "Medium"))
-
-
-@router.get("/reports/{report_name}")
-def get_report(request: Request, report_name: str) -> dict:
+@router.get("/settings")
+def get_settings(request: Request) -> dict:
     storage = _storage(request)
-    report_path = storage.reports_dir / report_name
-    if not report_path.exists():
-        raise HTTPException(status_code=404, detail="Report not found")
-    return storage.read_json(report_path)
+    target_db = storage.get_setting("target_db_path", "")
+    if not target_db:
+        target_db = str(storage.base_dir / "sample.db")
+    return {"target_db_path": target_db}
+
+
+@router.post("/settings")
+def update_settings(request: Request, payload: dict = Body(...)) -> dict:
+    storage = _storage(request)
+    if "target_db_path" in payload:
+        storage.set_setting("target_db_path", payload["target_db_path"])
+    return {"status": "success", "message": "Settings updated successfully"}

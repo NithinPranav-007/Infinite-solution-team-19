@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 class AIImpactAnalyzer:
-    def __init__(self, base_url: str | None = None, model: str | None = None, timeout: int = 60) -> None:
+    def __init__(self, base_url: str | None = None, model: str | None = None, timeout: int = 10) -> None:
         self.base_url = (base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")).rstrip("/")
         self.model = model or os.getenv("OLLAMA_MODEL", "llama3.2")
         self.timeout = timeout

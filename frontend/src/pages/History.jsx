@@ -27,7 +27,7 @@ export default function History({ drifts }) {
               </div>
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-200">{drift.severity || 'Low'}</span>
             </div>
-            <p className="mt-3 text-sm leading-6 text-slate-300">{drift.executive_summary || drift.impact_analysis?.executive_summary || 'No summary available.'}</p>
+            <p className="mt-3 text-sm leading-6 text-slate-300">{drift.analysis?.executive_summary || drift.impact_analysis?.executive_summary || drift.executive_summary || 'No summary available.'}</p>
           </article>
         ))}
         {!drifts.length && (

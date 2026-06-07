@@ -1,4 +1,4 @@
-const API_ROOT = 'http://localhost:8000'
+const API_ROOT = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_ROOT}${path}`, options)
@@ -15,7 +15,7 @@ export function fetchLatestSchema() {
 export function fetchHealth() {
   return request('/health').catch(async () => {
     try {
-      const response = await fetch('http://localhost:8000/health')
+      const response = await fetch(`${API_ROOT}/health`)
       if (!response.ok) {
         return null
       }
@@ -48,10 +48,6 @@ export function triggerScanWithPath(dbPath) {
   }).catch(() => null)
 }
 
-export function formatSeverity(value) {
-  return value || 'Low'
-}
-
 export function fetchDatabasePreview(dbPath = '', table = '') {
   const params = new URLSearchParams()
   if (dbPath) params.set('db_path', dbPath)
@@ -59,4 +55,18 @@ export function fetchDatabasePreview(dbPath = '', table = '') {
   params.set('limit', '5')
   const query = params.toString()
   return request(`/database/preview${query ? `?${query}` : ''}`).catch(() => null)
+}
+
+export function fetchSettings() {
+  return request('/settings').catch(() => ({ target_db_path: '' }))
+}
+
+export function saveSettings(settings) {
+  return request('/settings', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(settings),
+  }).catch(() => ({ status: 'error', message: 'Network request failed' }))
 }

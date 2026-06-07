@@ -9,7 +9,6 @@ from typing import Any
 from services.ai_analyzer import AIImpactAnalyzer
 from services.drift_detector import DriftDetector
 from services.migration_generator import MigrationGenerator
-from services.notifier import DiscordNotifier
 from services.schema_snapshot import SchemaSnapshotService
 from services.storage import StorageService
 
@@ -24,7 +23,6 @@ class SchemaGuardianAgent:
         drift_detector: DriftDetector,
         analyzer: AIImpactAnalyzer,
         generator: MigrationGenerator,
-        notifier: DiscordNotifier,
         db_path: str | None = None,
     ) -> None:
         self.storage = storage
@@ -32,7 +30,6 @@ class SchemaGuardianAgent:
         self.drift_detector = drift_detector
         self.analyzer = analyzer
         self.generator = generator
-        self.notifier = notifier
         self.db_path = db_path
 
     def run(self) -> dict[str, Any]:
@@ -48,24 +45,30 @@ class SchemaGuardianAgent:
                 changes=[],
                 analysis={"severity_label": "Low", "risk_score": 0, "executive_summary": "Baseline snapshot created."},
                 mitigation={"sql_migration_script": "-- Baseline snapshot only"},
-                notification={"sent": False, "dry_run": True},
             )
             self.storage.save_report(report["report_name"], report)
             return report
 
         changes = self.drift_detector.compare(previous_record, current_snapshot)
+
+        if not changes:
+            report = self._build_report(
+                current_snapshot=current_snapshot,
+                previous_snapshot=previous_record,
+                changes=[],
+                analysis={
+                    "severity_label": "Low",
+                    "risk_score": 0,
+                    "executive_summary": "No schema changes detected since the last snapshot.",
+                },
+                mitigation={"sql_migration_script": "-- No migration required"},
+                current_snapshot_path=current_snapshot_path,
+            )
+            self.storage.save_report(report["report_name"], report)
+            return report
+
         analysis = self.analyzer.analyze(previous_record, current_snapshot, changes)
         mitigation = self.generator.generate(changes, analysis)
-        notification = self.notifier.send(
-            message=self._notification_message(changes, analysis),
-            severity=analysis["severity_label"],
-            details={
-                "table": changes[0]["table"] if changes else "N/A",
-                "change": changes[0]["change"] if changes else "N/A",
-                "mitigation": mitigation["compatibility_views"],
-                "risk_score": analysis.get("risk_score", 0),
-            },
-        )
 
         drift_record = {
             "captured_at": datetime.now(timezone.utc).isoformat(),
@@ -76,7 +79,6 @@ class SchemaGuardianAgent:
             "changes": changes,
             "analysis": analysis,
             "mitigation": mitigation,
-            "notification": notification,
         }
         self.storage.save_drift(drift_record)
 
@@ -86,7 +88,6 @@ class SchemaGuardianAgent:
             changes=changes,
             analysis=analysis,
             mitigation=mitigation,
-            notification=notification,
             current_snapshot_path=current_snapshot_path,
         )
         self.storage.save_report(report["report_name"], report)
@@ -99,15 +100,6 @@ class SchemaGuardianAgent:
                 return self.storage.read_json(self.storage.snapshots_dir / snapshot["snapshot_name"])
         return None
 
-    def _notification_message(self, changes: list[dict[str, Any]], analysis: dict[str, Any]) -> str:
-        table = changes[0].get("table", "Unknown") if changes else "Unknown"
-        change = changes[0].get("change", "schema change") if changes else "schema change"
-        return (
-            f"🚨 Schema Drift Detected\n\nTable: {table}\nChange: {change}\n"
-            f"Severity: {analysis.get('severity_label', 'Medium')}\n"
-            f"Mitigation: {analysis.get('executive_summary', 'Review compatibility options')}"
-        )
-
     def _build_report(
         self,
         current_snapshot: dict[str, Any],
@@ -115,7 +107,6 @@ class SchemaGuardianAgent:
         changes: list[dict[str, Any]],
         analysis: dict[str, Any],
         mitigation: dict[str, Any],
-        notification: dict[str, Any],
         current_snapshot_path: str | None = None,
     ) -> dict[str, Any]:
         report_name = f"report_{datetime.now(timezone.utc).strftime('%Y_%m_%d_%H%M%S')}.json"
@@ -129,5 +120,4 @@ class SchemaGuardianAgent:
             "drift_changes": changes,
             "impact_analysis": analysis,
             "suggested_fixes": mitigation,
-            "notification": notification,
         }

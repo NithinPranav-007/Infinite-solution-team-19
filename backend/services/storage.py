@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +57,48 @@ class StorageService:
                 )
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )
+                """
+            )
+            connection.commit()
+
+
+    def _normalize_demo_customers_table(self, connection: sqlite3.Connection) -> bool:
+        """Reset demo drift pollution so simulations start from a clean schema."""
+        changed = False
+        cursor = connection.execute("PRAGMA table_info('customers')")
+        cols = [row[1] for row in cursor.fetchall()]
+        if not cols:
+            return False
+
+        if "fullname" in cols and "customer_name" not in cols:
+            connection.execute("ALTER TABLE customers RENAME COLUMN fullname TO customer_name")
+            cols = ["customer_name" if col == "fullname" else col for col in cols]
+            changed = True
+
+        for col in list(cols):
+            if col.startswith("meta_field_"):
+                connection.execute(f"ALTER TABLE customers DROP COLUMN {col}")
+                changed = True
+
+        cursor = connection.execute("PRAGMA table_info('customers')")
+        cols = {row[1] for row in cursor.fetchall()}
+        if "email_address" in cols and "email" not in cols:
+            connection.execute("ALTER TABLE customers RENAME COLUMN email_address TO email")
+            changed = True
+
+        return changed
+
+    def reset_snapshot_history(self) -> None:
+        for snapshot_file in self.snapshots_dir.glob("*.json"):
+            snapshot_file.unlink(missing_ok=True)
+        with sqlite3.connect(self.db_path) as connection:
+            connection.execute("DELETE FROM snapshots")
             connection.commit()
 
     def bootstrap_demo_database(self, database_name: str = "sample.db") -> Path:
@@ -96,67 +138,77 @@ class StorageService:
                 )
                 """
             )
+
+            normalized = self._normalize_demo_customers_table(connection)
+            if normalized:
+                connection.commit()
+                self.reset_snapshot_history()
+
+            # Check the table columns dynamically to prevent crash if columns were renamed or dropped during drift simulation
+            cursor = connection.execute("PRAGMA table_info('customers')")
+            customer_cols = {c[1] for c in cursor.fetchall()}
+            
             customer_count = connection.execute("SELECT COUNT(*) FROM customers").fetchone()[0]
-            if customer_count == 0:
+            if customer_count == 0 and "customer_name" in customer_cols and "email" in customer_cols:
                 connection.execute(
-                    "INSERT OR IGNORE INTO customers (customer_name, email) VALUES (?, ?)",
+                    "INSERT INTO customers (customer_name, email) VALUES (?, ?)",
                     ("Acme Corp", "ops@acme.example"),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO customers (customer_name, email) VALUES (?, ?)",
+                    "INSERT INTO customers (customer_name, email) VALUES (?, ?)",
                     ("Northwind", "data@northwind.example"),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO customers (customer_name, email) VALUES (?, ?)",
+                    "INSERT INTO customers (customer_name, email) VALUES (?, ?)",
                     ("Blue Peak Labs", "contact@bluepeak.example"),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
+                    "INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
                     (1, 1499.50, "active"),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
+                    "INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
                     (2, 249.00, "pending"),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
+                    "INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
                     (3, 895.75, "active"),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
                     (1, "SKU-001", 4, 199.95),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
                     (2, "SKU-014", 2, 124.50),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
                     (3, "SKU-021", 5, 179.15),
                 )
-            elif customer_count < 5:
+            elif customer_count < 5 and "customer_name" in customer_cols and "email" in customer_cols:
                 connection.execute(
-                    "INSERT OR IGNORE INTO customers (customer_name, email) VALUES (?, ?)",
+                    "INSERT INTO customers (customer_name, email) VALUES (?, ?)",
                     ("Skyline Retail", "hello@skylineretail.example"),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO customers (customer_name, email) VALUES (?, ?)",
+                    "INSERT INTO customers (customer_name, email) VALUES (?, ?)",
                     ("Vertex Health", "team@vertexhealth.example"),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
+                    "INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
                     (4, 1799.99, "active"),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
+                    "INSERT INTO orders (customer_id, total_amount, status) VALUES (?, ?, ?)",
                     (5, 640.25, "pending"),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
                     (4, "SKU-033", 3, 399.99),
                 )
                 connection.execute(
-                    "INSERT OR IGNORE INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO order_items (order_id, sku, quantity, unit_price) VALUES (?, ?, ?, ?)",
                     (5, "SKU-044", 1, 640.25),
                 )
             connection.commit()
@@ -181,7 +233,7 @@ class StorageService:
                 """,
                 (
                     snapshot_name,
-                    payload.get("captured_at", datetime.utcnow().isoformat()),
+                    payload.get("captured_at", datetime.now(timezone.utc).isoformat()),
                     payload.get("source_database", ""),
                     json.dumps(payload),
                 ),
@@ -219,7 +271,7 @@ class StorageService:
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    payload.get("captured_at", datetime.utcnow().isoformat()),
+                    payload.get("captured_at", datetime.now(timezone.utc).isoformat()),
                     payload.get("previous_snapshot"),
                     payload.get("current_snapshot"),
                     payload.get("severity"),
@@ -261,7 +313,7 @@ class StorageService:
                     created_at=excluded.created_at,
                     report_payload=excluded.report_payload
                 """,
-                (report_name, payload.get("created_at", datetime.utcnow().isoformat()), json.dumps(payload)),
+                (report_name, payload.get("created_at", datetime.now(timezone.utc).isoformat()), json.dumps(payload)),
             )
             connection.commit()
         return report_path
@@ -277,3 +329,29 @@ class StorageService:
             payload.update({"report_name": row[0], "created_at": row[1]})
             results.append(payload)
         return results
+
+    def get_setting(self, key: str, default: Any = None) -> Any:
+        with sqlite3.connect(self.db_path) as connection:
+            row = connection.execute(
+                "SELECT value FROM settings WHERE key = ?", (key,)
+            ).fetchone()
+        if not row:
+            return default
+        try:
+            return json.loads(row[0])
+        except json.JSONDecodeError:
+            return row[0]
+
+    def set_setting(self, key: str, value: Any) -> None:
+        val_str = json.dumps(value)
+        with sqlite3.connect(self.db_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO settings (key, value)
+                VALUES (?, ?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value
+                """,
+                (key, val_str),
+            )
+            connection.commit()
+

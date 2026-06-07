@@ -41,19 +41,16 @@ app.include_router(api_router)
 
 @app.get("/health", tags=["health"])
 def health_check() -> dict[str, str]:
+    configured_db = STORAGE.get_setting("target_db_path")
+    database_path = configured_db or str(DEMO_DATABASE)
     return {
         "status": "ok",
         "service": "Schema Evolution Guardian",
-        "database": str(DEMO_DATABASE),
+        "database": database_path,
     }
-
-
-@app.get("/api/health", tags=["health"])
-def api_health_check() -> dict[str, str]:
-    return health_check()
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("backend.app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)

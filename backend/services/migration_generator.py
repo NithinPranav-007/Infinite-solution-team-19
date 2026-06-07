@@ -22,7 +22,7 @@ class MigrationGenerator:
                 rollback_sql.append(f"-- Restore original type for {table}.{change['column']} if needed")
             elif kind == "renamed_column" and table:
                 compatibility_sql.append(
-                    f"CREATE VIEW IF NOT EXISTS {table}_compatibility AS SELECT {change['from']} AS {change['to']} FROM {table};"
+                    f"CREATE VIEW IF NOT EXISTS {table}_compatibility AS SELECT {change['to']} AS {change['from']} FROM {table};"
                 )
                 rollback_sql.append(f"-- Drop compatibility view for {table} when migration is complete")
             elif kind == "removed_column" and table:
